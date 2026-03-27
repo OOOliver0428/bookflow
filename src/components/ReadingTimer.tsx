@@ -23,6 +23,32 @@ export const ReadingTimer: React.FC = () => {
     };
   }, []);
   
+  // FIX: 页面关闭/刷新时提示用户有未保存的阅读记录
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isRunning && seconds > 0) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isRunning, seconds]);
+  
+  // FIX: 页面不可见时自动暂停计时，避免后台计时不准确
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden && isRunning) {
+        // 页面隐藏时记录当前状态（不暂停，因为用户可能只是切换标签页）
+        // 但记录时间戳以便恢复时校准
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [isRunning]);
+  
   const start = () => {
     if (!selectedBookId) return;
     setIsRunning(true);

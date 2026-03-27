@@ -14,6 +14,7 @@ export const ThemeToggle: React.FC = () => {
       onClick={toggleTheme}
       className="!p-2"
       title={isDark ? '切换到浅色模式' : '切换到深色模式'}
+      aria-label={isDark ? '切换到浅色模式' : '切换到深色模式'}
     >
       {isDark ? (
         <Moon className="w-4 h-4" />

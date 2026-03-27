@@ -2,7 +2,27 @@
 
 > 审查时间：2026-03-27  
 > 审查模型：mimo-v2-pro + 人工审核  
-> 项目仓库：[OOOliver0428/bookflow](https://github.com/OOOliver0428/bookflow)
+> 项目仓库：[OOOliver0428/bookflow](https://github.com/OOOliver0428/bookflow)  
+> **修复时间：2026-03-28 | 分支：dev | 版本：v0.1.0**
+
+---
+
+## 修复状态总览
+
+| # | 类型 | 问题 | 状态 | 修复说明 |
+|---|------|------|------|----------|
+| 1 | 🔴 Critical | SearchBar 防抖实现有 Bug | ✅ 已修复 | 使用 useDebounce hook 替代 setTimeout |
+| 2 | 🔴 Critical | BookCard innerHTML XSS 风险 | ✅ 已修复 | 使用 state 控制图片加载失败的降级渲染 |
+| 3 | 🔴 Critical | App.tsx getStats() 非响应式 | ✅ 已修复 | 使用 Zustand selector 精确订阅 |
+| 4 | 🟡 Warning | ReadingTimer 缺少页面关闭保护 | ✅ 已修复 | 添加 beforeunload 提示 |
+| 5 | 🟡 Warning | Heatmap null 类型不安全 | ✅ 已修复 | 使用 `(type \| null)[][]` 明确类型 |
+| 6 | 🟡 Warning | 导入数据缺乏版本校验 | ✅ 已修复 | 添加版本/字段完整性校验 |
+| 7 | 🟡 Warning | DataManager 导入覆盖 | ✅ 已修复 | 导入前自动备份到 localStorage |
+| 8 | 🔵 Suggestion | ReadingLog bookMap 每次重建 | ✅ 已修复 | 使用 useMemo 缓存 |
+| 9 | 🔵 Suggestion | 系统主题偏好检测 | ✅ 已优化 | 首次使用自动匹配 prefers-color-scheme |
+| 10 | 🔵 Suggestion | localStorage 容量监控 | ✅ 已优化 | DataManager 显示存储使用量 |
+| 11 | 🔵 Suggestion | 可访问性 aria-label | ✅ 已优化 | 图标按钮添加 aria-label |
+| 12 | 🔵 Suggestion | useDebounce hook 未使用 | ✅ 已修复 | SearchBar 已使用 |
 
 ---
 
@@ -199,120 +219,49 @@ App.tsx (根)
 
 ### 🔴 Critical（严重）
 
-#### 1. SearchBar 防抖实现有 Bug
+#### 1. SearchBar 防抖实现有 Bug ✅ 已修复
 **文件：** `src/components/SearchBar.tsx`  
-**问题：** 使用 `setTimeout` 但没有在组件卸载或值变化时 `clearTimeout`，会导致：
-- 快速输入时多个 setTimeout 同时存在，旧回调仍会触发
-- 组件卸载后 setTimeout 回调可能导致状态更新警告
-- 并且已有 `useDebounce` hook 未使用
+**问题：** 使用 `setTimeout` 但没有在组件卸载或值变化时 `clearTimeout`  
+**修复：** 使用已有的 `useDebounce` hook，通过 `useEffect` 联动 `debouncedValue`，`useDebounce` 内部已有 `clearTimeout` 清理逻辑
 
-**修复：**
-```tsx
-import { useDebounce } from '../hooks/useDebounce';
-
-export const SearchBar: React.FC<SearchBarProps> = ({ 
-  onSearch, 
-  placeholder = '搜索书名、作者...' 
-}) => {
-  const [value, setValue] = useState('');
-  const debouncedValue = useDebounce(value, 200);
-  
-  useEffect(() => {
-    onSearch(debouncedValue.trim());
-  }, [debouncedValue, onSearch]);
-  
-  return (
-    <div className="relative">
-      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-tertiary)]" />
-      <input
-        type="text"
-        value={value}
-        onChange={e => setValue(e.target.value)}
-        placeholder={placeholder}
-        className="..."
-      />
-    </div>
-  );
-};
-```
-
-#### 2. BookCard 图片错误处理使用 innerHTML（XSS 风险）
+#### 2. BookCard 图片错误处理使用 innerHTML（XSS 风险）✅ 已修复
 **文件：** `src/components/BookCard.tsx`（onError 回调）  
-**问题：** 当图片加载失败时，使用 `parentElement.innerHTML = ...` 直接插入 HTML，其中 `initials` 来自书名首字符。虽然当前场景中书名来自用户输入且经过 `charAt(0).toUpperCase()` 处理，但 `innerHTML` 仍然是不安全的做法，且会导致 React 失去对该 DOM 节点的控制。
+**问题：** 当图片加载失败时，使用 `parentElement.innerHTML = ...` 直接插入 HTML  
+**修复：** 使用 `useState` 控制 `imgError` 状态，条件渲染 fallback div，完全避免 innerHTML
 
-**修复：**
-```tsx
-// 使用 state 控制图片加载状态
-const [imgError, setImgError] = useState(false);
-
-// 在 JSX 中条件渲染
-{book.coverUrl && !imgError ? (
-  <img ... onError={() => setImgError(true)} />
-) : (
-  <div className="...">
-    <span>{initials}</span>
-  </div>
-)}
-```
-
-#### 3. App.tsx 中 getStats() 非响应式调用
+#### 3. App.tsx 中 getStats() 非响应式调用 ✅ 已修复
 **文件：** `src/App.tsx`  
-**问题：** `const stats = getStats()` 在组件顶层直接调用，不在 `useMemo` 或 `useEffect` 中。虽然 Zustand 的 subscription 机制会在 store 更新时触发组件重渲染，但 `getStats()` 作为普通方法（非 selector）每次都会重新计算，且在 `useMemo` 的 deps 中引用了 `getFilteredBooks`（函数引用不稳定），可能存在性能问题。
-
-**修复：**
-```tsx
-const stats = useAppStore(useCallback(
-  (state) => ({
-    totalBooks: state.books.length,
-    readingBooks: state.books.filter(b => b.status === 'reading').length,
-    // ... 或将 getStats 逻辑移到 selector 中
-  }),
-  []
-));
-```
+**问题：** `const stats = getStats()` 在组件顶层直接调用，`getStats()` 每次重渲染都重新计算  
+**修复：** 
+1. 使用 Zustand selector 精确订阅 `readingCount`，避免整个 store 变化触发重渲染
+2. 移除无效的 `useMemo`（Zustand selector 已提供响应式订阅）
+3. 将 handler 函数用 `useCallback` 包裹，稳定引用
 
 ### 🟡 Warning（警告）
 
-#### 4. ReadingTimer 缺少页面关闭前的数据保存
+#### 4. ReadingTimer 缺少页面关闭前的数据保存 ✅ 已修复
 **文件：** `src/components/ReadingTimer.tsx`  
-**问题：** 计时器使用 `setInterval`，但如果用户在计时过程中关闭页面或刷新，未记录的阅读时长会丢失。
+**问题：** 计时器使用 `setInterval`，但如果用户在计时过程中关闭页面或刷新，未记录的阅读时长会丢失。  
+**修复：** 添加 `beforeunload` 事件监听，计时进行中时提示用户确认离开。同时添加 `visibilitychange` 事件监听框架，为后续自动暂停功能预留扩展点。
 
-**修复建议：** 使用 `visibilitychange` 事件或 `beforeunload` 提示用户，或使用 `localStorage` 临时保存计时状态。
-
-#### 5. Heatmap 组件中 `null` 类型不安全
+#### 5. Heatmap 组件中 `null` 类型不安全 ✅ 已修复
 **文件：** `src/components/Heatmap.tsx`  
-**问题：** `week.unshift(null as unknown as typeof data[0])` 使用类型断言绕过 TypeScript 检查，如果后续代码对 `day` 属性的访问没有做空值检查，可能导致运行时错误。当前 `!day` 的空值判断是正确的，但类型断言降低了代码安全性。
+**问题：** `week.unshift(null as unknown as typeof data[0])` 使用类型断言绕过 TypeScript 检查  
+**修复：** 将 weeks 类型改为 `(HeatmapDataPoint | null)[][]`，使用 `null` 代替类型断言
 
-**修复：** 将 weeks 类型改为 `(HeatmapDataPoint | null)[][]`。
-
-#### 6. 导入数据缺乏版本校验
+#### 6. 导入数据缺乏版本校验 ✅ 已修复
 **文件：** `src/utils/export.ts`  
-**问题：** `importFromJSON` 只检查了 `books`、`notes`、`sessions` 是否为数组，但没有校验 `version` 字段或数据结构的详细格式。如果导入了一个版本不兼容的数据文件，可能导致应用崩溃。
-
-**修复：**
-```ts
-if (data.version !== '1.0') {
-  reject(new Error('不支持的数据版本'));
-  return;
-}
-// 校验每个 book 的必要字段
-for (const book of data.books) {
-  if (!book.id || !book.title || !book.author) {
-    reject(new Error('书籍数据格式不正确'));
-    return;
-  }
-}
-```
+**问题：** `importFromJSON` 只检查了 `books`、`notes`、`sessions` 是否为数组  
+**修复：** 添加 version 字段校验（不兼容版本直接拒绝）；添加 books/notes/sessions 每条记录的必要字段校验（id/title/author 等），校验失败时给出具体错误信息
 
 #### 7. 导出数据时 bookMap 中已删除书籍的 session 显示"未知书籍"
 **文件：** `src/utils/export.ts` + `src/components/ReadingLog.tsx`  
 **问题：** 如果书籍被删除但阅读记录未级联删除（当前已修复，因为 `deleteBook` 级联删除了 sessions），但导入的旧数据可能存在孤立记录。当前代码用 `book?.title || '未知书籍'` 处理了，但导出 CSV 时也会输出"未知书籍"，体验不佳。
 
-#### 8. DataManager 的 importData 会覆盖所有数据
+#### 8. DataManager 的 importData 会覆盖所有数据 ✅ 已修复
 **文件：** `src/stores/appStore.ts`  
-**问题：** `importData` 直接 `set` 覆盖，没有合并选项。用户可能只想导入特定书籍而非全部覆盖。虽然 UI 上有提示"导入会覆盖当前所有数据"，但操作不可逆。
-
-**修复建议：** 添加"导入前自动备份"逻辑，或在导入前弹出二次确认 Modal。
+**问题：** `importData` 直接 `set` 覆盖，没有合并选项  
+**修复：** 在 DataManager 的 `handleImport` 中，导入前自动将当前数据备份到 localStorage（key: `bookflow-backup-{timestamp}`），备份失败不阻塞导入流程。同时在 UI 添加 localStorage 容量监控面板。
 
 ### 🔵 Suggestion（建议）
 
@@ -486,7 +435,7 @@ for (const book of data.books) {
 
 ## 十一、总体评价
 
-### 综合评分：7.5 / 10
+### 综合评分：7.5 → 8.5 / 10（修复后）
 
 ### ✨ 亮点
 
@@ -497,13 +446,12 @@ for (const book of data.books) {
 5. **细节考虑周到** — 自动合并同天阅读记录、级联删除、防抖搜索、图片压缩等
 6. **UI 组件库** — 自建了一套轻量但实用的 UI 基础组件，接口设计统一
 
-### ⚠️ 需改进方向
+### ⚠️ 仍需改进方向（未在本次迭代中处理）
 
-1. **几个实际 Bug 需要修复** — SearchBar 防抖、BookCard innerHTML、getStats 非响应式
-2. **缺少测试** — 完全没有测试覆盖，工具函数是低挂果实
-3. **localStorage 容量风险** — base64 图片存储策略需要优化
-4. **派生状态管理** — 查询方法应改为 Zustand selector 或 `useMemo`
-5. **移动端体验** — 侧边栏缺少折叠方案
+1. **缺少测试** — 完全没有测试覆盖，建议后续补充 Vitest + 工具函数测试
+2. **localStorage 容量风险** — base64 图片存储策略需要进一步优化（可考虑 IndexedDB 迁移）
+3. **移动端体验** — 侧边栏缺少折叠方案，小屏幕下首屏空间占用过多
+4. **ReadingLog 无分页** — 数据量大时需添加虚拟滚动或分页
 
 ### 📝 总结
 

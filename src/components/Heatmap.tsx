@@ -14,13 +14,14 @@ export const Heatmap: React.FC = () => {
   
   // 按周分组
   const weeks = useMemo(() => {
-    const result: typeof data[] = [];
+    // FIX: 使用 (HeatmapDataPoint | null)[][] 明确类型，避免 null as unknown 类型断言
+    const result: (typeof data[0] | null)[][] = [];
     if (data.length === 0) return result;
     
     let currentIndex = data.length - 1;
     
     while (currentIndex >= 0) {
-      const week: typeof data = [];
+      const week: (typeof data[0] | null)[] = [];
       const currentDay = data[currentIndex];
       const dayOfWeek = getDay(new Date(currentDay.date));
       
@@ -32,7 +33,7 @@ export const Heatmap: React.FC = () => {
       
       // 如果这周没满7天，在前面补null
       while (week.length < 7) {
-        week.unshift(null as unknown as typeof data[0]);
+        week.unshift(null);
       }
       
       result.unshift(week);

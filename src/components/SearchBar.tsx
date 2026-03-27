@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search } from 'lucide-react';
+import { useDebounce } from '../hooks/useDebounce';
 
 interface SearchBarProps {
   onSearch: (query: string) => void;
@@ -11,17 +12,12 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   placeholder = '搜索书名、作者...' 
 }) => {
   const [value, setValue] = useState('');
+  // FIX: 使用 useDebounce hook 替代 setTimeout，避免内存泄漏和多次触发
+  const debouncedValue = useDebounce(value, 200);
   
-  // 简单的防抖实现
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = e.target.value;
-    setValue(newValue);
-    
-    // 使用 setTimeout 实现简单防抖
-    setTimeout(() => {
-      onSearch(newValue.trim());
-    }, 200);
-  };
+  useEffect(() => {
+    onSearch(debouncedValue.trim());
+  }, [debouncedValue, onSearch]);
   
   return (
     <div className="relative">
@@ -29,7 +25,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
       <input
         type="text"
         value={value}
-        onChange={handleChange}
+        onChange={e => setValue(e.target.value)}
         placeholder={placeholder}
         className="
           w-full pl-9 pr-3 py-2

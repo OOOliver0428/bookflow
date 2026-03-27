@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Trash2 } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import { formatDate } from '../utils/date';
@@ -6,11 +6,15 @@ import { formatDate } from '../utils/date';
 export const ReadingLog: React.FC = () => {
   const { sessions, books, deleteSession } = useAppStore();
   
-  const bookMap = new Map(books.map(b => [b.id, b]));
+  // FIX: 使用 useMemo 缓存 bookMap，避免每次渲染都重新创建
+  const bookMap = useMemo(() => new Map(books.map(b => [b.id, b])), [books]);
   
   // 按日期倒序
-  const sortedSessions = [...sessions].sort(
-    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+  const sortedSessions = useMemo(() => 
+    [...sessions].sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    ),
+    [sessions]
   );
   
   if (sortedSessions.length === 0) {
@@ -64,6 +68,7 @@ export const ReadingLog: React.FC = () => {
                     onClick={() => deleteSession(session.id)}
                     className="p-1.5 text-[var(--color-text-tertiary)] hover:text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 rounded-lg transition-all opacity-0 group-hover:opacity-100"
                     title="删除记录"
+                    aria-label="删除阅读记录"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>

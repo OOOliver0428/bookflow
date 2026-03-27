@@ -348,6 +348,11 @@ export const useAppStore = create<AppStore>()(
       onRehydrateStorage: () => (state) => {
         // 恢复时应用主题
         if (state) {
+          // FIX: 首次使用时检测系统主题偏好
+          if (state.books.length === 0 && state.sessions.length === 0) {
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            state.theme = prefersDark ? 'dark' : 'light';
+          }
           document.documentElement.setAttribute('data-theme', state.theme);
         }
       },

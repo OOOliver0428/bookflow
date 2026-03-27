@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import React, { memo, useState } from 'react';
 import type { Book } from '../types';
 import { Badge } from './ui';
 
@@ -8,6 +8,9 @@ interface BookCardProps {
 }
 
 export const BookCard: React.FC<BookCardProps> = memo(({ book, onClick }) => {
+  // FIX: 使用 state 控制图片加载失败状态，替代不安全的 innerHTML 操作
+  const [imgError, setImgError] = useState(false);
+  
   const progress = book.totalPages > 0 
     ? Math.round((book.currentPage / book.totalPages) * 100) 
     : 0;
@@ -20,17 +23,13 @@ export const BookCard: React.FC<BookCardProps> = memo(({ book, onClick }) => {
     >
       {/* Cover */}
       <div className="relative aspect-[2/3] bg-[var(--color-bg-hover)] overflow-hidden">
-        {book.coverUrl ? (
+        {book.coverUrl && !imgError ? (
           <img
             src={book.coverUrl}
             alt={book.title}
             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
             loading="lazy"
-            onError={(e) => {
-              const target = e.target as HTMLImageElement;
-              target.style.display = 'none';
-              target.parentElement!.innerHTML = `<div class="w-full h-full flex items-center justify-center bg-[var(--color-bg-elevated)] text-4xl font-bold text-[var(--color-text-tertiary)]">${initials}</div>`;
-            }}
+            onError={() => setImgError(true)}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-[var(--color-bg-elevated)]">

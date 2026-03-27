@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { BookOpen, Plus, LayoutGrid, List, Database } from 'lucide-react';
 import { useAppStore } from './stores/appStore';
 import {
@@ -18,14 +18,12 @@ import { Button, Modal } from './components/ui';
 import type { Book, BookInput } from './types';
 
 function App() {
-  // Store selectors
-  const { 
-    getStats, 
-    getFilteredBooks, 
-    addBook, 
-    updateBook, 
-    deleteBook,
-  } = useAppStore();
+  // FIX: 使用 Zustand selector 精确订阅所需数据，避免整个 store 变化触发重渲染
+  const readingCount = useAppStore(state => state.books.filter(b => b.status === 'reading').length);
+  const addBook = useAppStore(state => state.addBook);
+  const updateBook = useAppStore(state => state.updateBook);
+  const deleteBook = useAppStore(state => state.deleteBook);
+  const getFilteredBooks = useAppStore(state => state.getFilteredBooks);
   
   // Local state
   const [searchQuery, setSearchQuery] = useState('');
@@ -35,49 +33,42 @@ function App() {
   const [isDataManagerOpen, setIsDataManagerOpen] = useState(false);
   const [editingBook, setEditingBook] = useState<Book | null>(null);
   
-  // Derived state
-  const stats = getStats();
-  const filteredBooks = useMemo(() => {
-    return getFilteredBooks({ tag: activeTag, searchQuery });
-  }, [getFilteredBooks, activeTag, searchQuery]);
+  // Derived state - getFilteredBooks 已是纯函数，直接调用
+  const filteredBooks = getFilteredBooks({ tag: activeTag, searchQuery });
+  const readingBooks = filteredBooks.filter(b => b.status === 'reading');
+  const otherBooks = filteredBooks.filter(b => b.status !== 'reading');
   
-  const readingBooks = useMemo(() => 
-    filteredBooks.filter(b => b.status === 'reading'),
-    [filteredBooks]
-  );
-  
-  const otherBooks = useMemo(() => 
-    filteredBooks.filter(b => b.status !== 'reading'),
-    [filteredBooks]
-  );
-  
-  // Handlers
-  const handleAddBook = (input: BookInput) => {
+  // Handlers - 使用 useCallback 稳定引用
+  const handleAddBook = useCallback((input: BookInput) => {
     addBook(input);
     setIsBookFormOpen(false);
-  };
+  }, [addBook]);
   
-  const handleUpdateBook = (input: BookInput) => {
+  const handleUpdateBook = useCallback((input: BookInput) => {
     if (editingBook) {
       updateBook(editingBook.id, input);
       setEditingBook(null);
       setSelectedBook(null);
     }
-  };
+  }, [editingBook, updateBook]);
   
-  const handleDeleteBook = () => {
+  const handleDeleteBook = useCallback(() => {
     if (selectedBook) {
       deleteBook(selectedBook.id);
       setSelectedBook(null);
     }
-  };
+  }, [selectedBook, deleteBook]);
   
-  const handleStartTimer = () => {
+  const handleStartTimer = useCallback(() => {
     setSelectedBook(null);
-    // Scroll to timer
     document.getElementById('reading-timer')?.scrollIntoView({ behavior: 'smooth' });
-  };
+  }, []);
   
+  // FIX: 使用 useCallback 稳定搜索回调，避免 SearchBar 不必要重渲染
+  const handleSearch = useCallback((query: string) => {
+    setSearchQuery(query);
+  }, []);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -117,12 +108,12 @@ function App() {
               {/* Reading Count */}
               <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-[var(--color-bg-surface)] border border-[var(--color-border)] rounded-lg text-sm text-[var(--color-text-secondary)]">
                 <span className="w-2 h-2 rounded-full bg-[var(--color-accent)] animate-pulse" />
-                正在阅读 {stats.readingBooks} 本
+                正在阅读 {readingCount} 本
               </div>
               
               {/* Search */}
               <div className="hidden md:block w-48">
-                <SearchBar onSearch={setSearchQuery} />
+                <SearchBar onSearch={handleSearch} />
               </div>
               
               {/* Data Manager */}
@@ -132,6 +123,7 @@ function App() {
                 onClick={() => setIsDataManagerOpen(true)}
                 className="!p-2"
                 title="数据管理"
+                aria-label="数据管理"
               >
                 <Database className="w-5 h-5" />
               </Button>
@@ -185,7 +177,7 @@ function App() {
           <div className="space-y-8">
             {/* Mobile Search */}
             <div className="md:hidden">
-              <SearchBar onSearch={setSearchQuery} />
+              <SearchBar onSearch={handleSearch} />
             </div>
             
             {/* Currently Reading */}

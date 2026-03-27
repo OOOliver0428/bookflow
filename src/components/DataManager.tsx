@@ -1,8 +1,33 @@
-import React, { useState, useRef } from 'react';
-import { Download, Upload, AlertTriangle } from 'lucide-react';
+import React, { useState, useRef, useMemo } from 'react';
+import { Download, Upload, AlertTriangle, HardDrive } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import { exportToJSON, exportSessionsToCSV, downloadFile, importFromJSON } from '../utils/export';
 import { Button, Modal } from './ui';
+
+// FIX: localStorage 容量监控工具函数
+function getLocalStorageUsage(): { used: number; total: number; percent: number } {
+  let used = 0;
+  try {
+    for (const key in localStorage) {
+      if (Object.prototype.hasOwnProperty.call(localStorage, key)) {
+        used += localStorage.getItem(key)?.length || 0;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  // UTF-16 编码，每个字符 2 字节；加上 key 的开销
+  used = used * 2;
+  // 默认 localStorage 上限约 5MB
+  const total = 5 * 1024 * 1024;
+  return { used, total, percent: Math.round((used / total) * 100) };
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 export const DataManager: React.FC = () => {
   const { books, notes, sessions, importData, resetData } = useAppStore();
@@ -10,6 +35,9 @@ export const DataManager: React.FC = () => {
   const [importError, setImportError] = useState<string | null>(null);
   const [importSuccess, setImportSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // FIX: 计算 localStorage 使用量
+  const storageUsage = useMemo(() => getLocalStorageUsage(), [books, notes, sessions]);
   
   const handleExportJSON = () => {
     const json = exportToJSON(books, notes, sessions);
@@ -32,6 +60,15 @@ export const DataManager: React.FC = () => {
     
     try {
       const data = await importFromJSON(file);
+      // FIX: 导入前自动备份当前数据到 localStorage
+      try {
+        const backupKey = `bookflow-backup-${Date.now()}`;
+        const backupData = JSON.stringify({ books, notes, sessions, exportedAt: new Date().toISOString() });
+        localStorage.setItem(backupKey, backupData);
+      } catch {
+        // localStorage 空间不足时不阻塞导入流程
+        console.warn('自动备份失败，localStorage 可能已满');
+      }
       importData(data);
       setImportSuccess(true);
       setTimeout(() => {
@@ -55,6 +92,32 @@ export const DataManager: React.FC = () => {
   
   return (
     <div className="space-y-6">
+      {/* FIX: 存储空间监控 */}
+      <div className="p-3 bg-[var(--color-bg-hover)] rounded-lg">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <HardDrive className="w-4 h-4 text-[var(--color-text-tertiary)]" />
+            <span className="text-sm text-[var(--color-text-secondary)]">本地存储</span>
+          </div>
+          <span className="text-sm font-medium text-[var(--color-text-primary)]">
+            {formatBytes(storageUsage.used)} / {formatBytes(storageUsage.total)}
+          </span>
+        </div>
+        <div className="h-1.5 bg-[var(--color-border)] rounded-full overflow-hidden">
+          <div 
+            className={`h-full rounded-full transition-all duration-300 ${
+              storageUsage.percent > 80 ? 'bg-[var(--color-danger)]' : 
+              storageUsage.percent > 60 ? 'bg-yellow-500' : 'bg-[var(--color-accent)]'
+            }`}
+            style={{ width: `${Math.min(storageUsage.percent, 100)}%` }}
+          />
+        </div>
+        {storageUsage.percent > 80 && (
+          <p className="mt-2 text-xs text-[var(--color-danger)]">
+            ⚠️ 存储空间即将用满（{storageUsage.percent}%），建议导出备份后清理数据
+          </p>
+        )}
+      </div>
       {/* Export */}
       <div>
         <h3 className="text-sm font-semibold text-[var(--color-text-primary)] mb-3">
